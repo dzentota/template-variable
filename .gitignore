@@ -1,0 +1,8 @@
+vendor
+.idea
+.composer
+.cache
+.bash_history
+.phpunit.result.cache
+tmp/*
+build/*
