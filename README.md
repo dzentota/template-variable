@@ -80,15 +80,15 @@ TemplateVariable intelligently handles different value types:
 use Dzentota\TemplateVariable\TemplateVariable;
 
 // Automatic HTML escaping
-$name = new TemplateVariable('<script>alert("XSS")</script>');
+$name = TemplateVariable::create('<script>alert("XSS")</script>');
 echo $name; // &lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;
 
 // Explicit context escaping  
-$attr = new TemplateVariable('" onload="alert(1)" class="');
+$attr = TemplateVariable::create('" onload="alert(1)" class="');
 echo $attr('attr'); // &quot; onload=&quot;alert(1)&quot; class=&quot;
 
 // Multiple contexts
-$data = new TemplateVariable('</script><script>alert(1)</script>');
+$data = TemplateVariable::create('</script><script>alert(1)</script>');
 echo $data('html'); // &lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;
 echo $data('js');   // \u003C\/script\u003E\u003Cscript\u003Ealert(1)\u003C\/script\u003E
 echo $data('url');  // %3C%2Fscript%3E%3Cscript%3Ealert%281%29%3C%2Fscript%3E
@@ -97,30 +97,43 @@ echo $data('url');  // %3C%2Fscript%3E%3Cscript%3Ealert%281%29%3C%2Fscript%3E
 ### TypedValue Integration
 
 ```php
-// Works with dzentota/typedvalue objects
+// Works with dzentota/typedvalue objects that implement Typed interface
 use Some\TypedValue\Email;
 
 $email = Email::fromNative('user@example.com');
-$template = new TemplateVariable($email);
+$template = TemplateVariable::create($email);
 echo $template; // user@example.com (extracted via toNative())
 
-// TypedValue returning malicious content gets escaped
-$maliciousTyped = new class {
+// IMPORTANT: Only objects implementing dzentota\TypedValue\Typed interface 
+// will have toNative() called. Regular objects are returned as-is.
+
+// Real TypedValue returning malicious content gets escaped
+$maliciousTyped = new class implements \dzentota\TypedValue\Typed {
+    public function toNative(): string {
+        return '<script>alert("XSS")</script>';
+    }
+    // ... other required interface methods
+};
+$var = TemplateVariable::create($maliciousTyped);
+echo $var; // &lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;
+
+// Regular object with toNative() method - toNative() is IGNORED
+$regularObject = new class {
     public function toNative(): string {
         return '<script>alert("XSS")</script>';
     }
 };
-$var = new TemplateVariable($maliciousTyped);
-echo $var; // &lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;
+$result = TemplateVariable::create($regularObject);
+// $result is the original object, NOT a TemplateVariable
 ```
 
 ### Scalar Value Safety
 
 ```php
 // Scalar values are treated as safe (not tainted)
-$userId = new TemplateVariable(12345);
-$isActive = new TemplateVariable(true);
-$price = new TemplateVariable(99.99);
+$userId = TemplateVariable::create(12345);
+$isActive = TemplateVariable::create(true);
+$price = TemplateVariable::create(99.99);
 
 echo $userId;   // 12345
 echo $isActive; // 1
@@ -134,38 +147,38 @@ var_dump($userId->needsEscaping('html')); // false
 
 ### HTML Context (Default)
 ```php
-$var = new TemplateVariable('<b>Bold</b>');
+$var = TemplateVariable::create('<b>Bold</b>');
 echo $var;          // &lt;b&gt;Bold&lt;/b&gt;
 echo $var('html');  // &lt;b&gt;Bold&lt;/b&gt;
 ```
 
 ### Attribute Context
 ```php
-$class = new TemplateVariable('" onclick="alert(1)" class="');
+$class = TemplateVariable::create('" onclick="alert(1)" class="');
 echo "<div class=\"{$class('attr')}\">"; // Safe attribute injection prevention
 ```
 
 ### JavaScript Context
 ```php
-$data = new TemplateVariable('</script><script>alert(1)</script>');
+$data = TemplateVariable::create('</script><script>alert(1)</script>');
 echo "var x = '{$data('js')}';"; // Flexible escaping without quotes
 ```
 
 ### CSS Context
 ```php
-$style = new TemplateVariable('color: red; </style><script>alert(1)</script>');
+$style = TemplateVariable::create('color: red; </style><script>alert(1)</script>');
 echo "body { content: '{$style('css')}'; }";
 ```
 
 ### URL Context
 ```php
-$param = new TemplateVariable('hello world & more');
+$param = TemplateVariable::create('hello world & more');
 echo "https://example.com?q={$param('url')}";
 ```
 
 ### Raw Context (No Escaping)
 ```php
-$trusted = new TemplateVariable('<em>Trusted HTML</em>');
+$trusted = TemplateVariable::create('<em>Trusted HTML</em>');
 echo $trusted('raw'); // <em>Trusted HTML</em> - no escaping
 ```
 
@@ -187,19 +200,19 @@ $raw = TemplateVariable::raw('<b>trusted</b>');
 
 ```php
 // Attribute injection attack
-$userClass = new TemplateVariable('" onload="alert(1)" class="');
+$userClass = TemplateVariable::create('" onload="alert(1)" class="');
 $html = "<div class=\"user-content {$userClass('attr')}\">Safe</div>";
 // Result: <div class="user-content &quot; onload=&quot;alert(1)&quot; class=&quot;">Safe</div>
 
 // JavaScript context attack
-$userData = new TemplateVariable('"; alert("XSS"); var x="');
+$userData = TemplateVariable::create('"; alert("XSS"); var x="');
 $js = "var message = '{$userData('js')}';";
 // Result: var message = '\"; alert(\"XSS\"); var x=\"';
 
 // Multi-context template
-$name = new TemplateVariable('<script>alert("XSS")</script>');
-$id = new TemplateVariable(42);
-$comment = new TemplateVariable('Check out </script><script>alert(1)</script>');
+$name = TemplateVariable::create('<script>alert("XSS")</script>');
+$id = TemplateVariable::create(42);
+$comment = TemplateVariable::create('Check out </script><script>alert(1)</script>');
 
 $template = <<<HTML
 <div class="user" data-id="{$id}">
@@ -238,7 +251,7 @@ class CustomEscaper implements EscaperInterface
     }
 }
 
-$var = new TemplateVariable('<test>', EscapeContext::HTML, new CustomEscaper());
+$var = TemplateVariable::create('<test>', EscapeContext::HTML, new CustomEscaper());
 echo $var; // SAFE: &lt;test&gt;
 ```
 
@@ -246,14 +259,14 @@ echo $var; // SAFE: &lt;test&gt;
 
 ```php
 // Set JavaScript as default context instead of HTML
-$var = new TemplateVariable('<script>', EscapeContext::JAVASCRIPT);
+$var = TemplateVariable::create('<script>', EscapeContext::JAVASCRIPT);
 echo $var; // \u003Cscript\u003E (JavaScript escaping)
 ```
 
 ## 🧪 Utility Methods
 
 ```php
-$var = new TemplateVariable('<script>alert(1)</script>');
+$var = TemplateVariable::create('<script>alert(1)</script>');
 
 // Check if escaping is needed
 $var->needsEscaping('html');     // true
@@ -327,7 +340,7 @@ php examples/basic_usage.php
 ## 🔗 Related Projects
 
 - **[dzentota/typedvalue](https://github.com/dzentota/typedvalue)** - Domain primitive value objects
-- **[AppSec Manifesto](https://github.com/dzentota/appsec-manifesto)** - Security-first development principles
+- **[AppSec Manifesto](https://github.com/dzentota/AppSecManifesto)** - Security-first development principles
 
 ## 📄 License
 
@@ -351,7 +364,7 @@ This library is designed to prevent XSS attacks through automatic context-aware 
 - **Keep the library updated** to latest version
 - **Test your templates** with malicious input
 
-For security issues, please email [security@example.com](mailto:security@example.com).
+For security issues, please email [webtota@gmail.com](mailto:webtota@gmail.com).
 
 ---
 
@@ -394,13 +407,13 @@ class CustomEscaper implements EscaperInterface
     }
 }
 
-$var = new TemplateVariable('data', EscapeContext::HTML, new CustomEscaper());
+$var = TemplateVariable::create('data', EscapeContext::HTML, new CustomEscaper());
 ```
 
 ### Checking if Escaping is Needed
 
 ```php
-$var = new TemplateVariable('simple text');
+$var = TemplateVariable::create('simple text');
 if ($var->needsEscaping('html')) {
     echo "This value needs HTML escaping";
 }
@@ -437,5 +450,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Alex Tatulchenkov** - AppSec Leader | Enterprise Web Defender
 
-- LinkedIn: [View Profile](https://linkedin.com/in/dzentota)
+- LinkedIn: [View Profile](https://www.linkedin.com/in/alex-tatulchenkov/)
 - GitHub: [@dzentota](https://github.com/dzentota) 

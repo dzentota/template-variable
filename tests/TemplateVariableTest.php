@@ -24,7 +24,7 @@ class TemplateVariableTest extends TestCase
     public function testAutoHtmlEscaping(): void
     {
         $maliciousInput = '<script>alert("XSS")</script>';
-        $var = new TemplateVariable($maliciousInput);
+        $var = TemplateVariable::create($maliciousInput);
         
         $expected = '&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;';
         $this->assertEquals($expected, (string) $var);
@@ -37,7 +37,7 @@ class TemplateVariableTest extends TestCase
     public function testExplicitHtmlEscaping(): void
     {
         $maliciousInput = '<script>alert("XSS")</script>';
-        $var = new TemplateVariable($maliciousInput);
+        $var = TemplateVariable::create($maliciousInput);
         
         $expected = '&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;';
         $this->assertEquals($expected, $var('html'));
@@ -51,7 +51,7 @@ class TemplateVariableTest extends TestCase
     {
         // Realistic attack vector: attribute injection
         $userInput = '" onload="alert(1)" class="';
-        $var = new TemplateVariable($userInput);
+        $var = TemplateVariable::create($userInput);
         
         $expected = '&quot; onload=&quot;alert(1)&quot; class=&quot;';
         $this->assertEquals($expected, $var('attr'));
@@ -65,7 +65,7 @@ class TemplateVariableTest extends TestCase
     public function testJavaScriptEscaping(): void
     {
         $maliciousInput = '</script><script>alert("XSS")</script>';
-        $var = new TemplateVariable($maliciousInput);
+        $var = TemplateVariable::create($maliciousInput);
         
         // Should use flexible escaping without automatic quotes
         $result = $var('js');
@@ -83,7 +83,7 @@ class TemplateVariableTest extends TestCase
     public function testUrlEscaping(): void
     {
         $userInput = 'hello world & special chars';
-        $var = new TemplateVariable($userInput);
+        $var = TemplateVariable::create($userInput);
         
         $expected = 'hello%20world%20%26%20special%20chars';
         $this->assertEquals($expected, $var('url'));
@@ -97,7 +97,7 @@ class TemplateVariableTest extends TestCase
     public function testCssEscaping(): void
     {
         $userInput = 'color: red; background: url("javascript:alert(1)")';
-        $var = new TemplateVariable($userInput);
+        $var = TemplateVariable::create($userInput);
         
         $result = $var('css');
         
@@ -112,7 +112,7 @@ class TemplateVariableTest extends TestCase
     public function testRawContext(): void
     {
         $userInput = '<script>alert("XSS")</script>';
-        $var = new TemplateVariable($userInput);
+        $var = TemplateVariable::create($userInput);
         
         // Raw context should return the input unchanged
         $this->assertEquals($userInput, $var('raw'));
@@ -147,14 +147,66 @@ class TemplateVariableTest extends TestCase
     }
     
     /**
-     * Test getRaw method
+     * Test getRaw method returns original value
      */
     public function testGetRaw(): void
     {
-        $input = '<script>alert("test")</script>';
-        $var = new TemplateVariable($input);
+        $stringInput = '<script>alert("test")</script>';
+        $stringVar = TemplateVariable::create($stringInput);
+        $this->assertEquals($stringInput, $stringVar->getRaw());
         
-        $this->assertEquals($input, $var->getRaw());
+        $intInput = 42;
+        $intVar = TemplateVariable::create($intInput);
+        $this->assertEquals($intInput, $intVar->getRaw());
+        
+        // Arrays are returned as-is by create()
+        $arrayInput = ['key' => 'value'];
+        $arrayResult = TemplateVariable::create($arrayInput);
+        $this->assertEquals($arrayInput, $arrayResult); // Returns the array itself, not a TemplateVariable
+    }
+    
+    /**
+     * Test create() method behavior
+     */
+    public function testCreateMethod(): void
+    {
+        // Test with string - should create TemplateVariable
+        $stringVar = TemplateVariable::create('<script>alert(1)</script>');
+        $this->assertInstanceOf(TemplateVariable::class, $stringVar);
+        $this->assertEquals('&lt;script&gt;alert(1)&lt;/script&gt;', (string) $stringVar);
+        
+        // Test with scalar - should create TemplateVariable
+        $intVar = TemplateVariable::create(42);
+        $this->assertInstanceOf(TemplateVariable::class, $intVar);
+        $this->assertEquals('42', (string) $intVar);
+        $this->assertFalse($intVar->needsEscaping('html'));
+        
+        $boolVar = TemplateVariable::create(true);
+        $this->assertInstanceOf(TemplateVariable::class, $boolVar);
+        $this->assertEquals('1', (string) $boolVar);
+        
+        // Test with array - should return array as-is
+        $arrayInput = ['test' => 'value'];
+        $arrayResult = TemplateVariable::create($arrayInput);
+        $this->assertEquals($arrayInput, $arrayResult);
+        $this->assertNotInstanceOf(TemplateVariable::class, $arrayResult);
+        
+        // Test with object - should return object as-is
+        $objectInput = new \stdClass();
+        $objectInput->prop = 'value';
+        $objectResult = TemplateVariable::create($objectInput);
+        $this->assertEquals($objectInput, $objectResult);
+        $this->assertNotInstanceOf(TemplateVariable::class, $objectResult);
+        
+        // Test with Stringable - should create TemplateVariable
+        $stringable = new class implements \Stringable {
+            public function __toString(): string {
+                return '<em>Stringable content</em>';
+            }
+        };
+        $stringableVar = TemplateVariable::create($stringable);
+        $this->assertInstanceOf(TemplateVariable::class, $stringableVar);
+        $this->assertEquals('&lt;em&gt;Stringable content&lt;/em&gt;', (string) $stringableVar);
     }
     
     /**
@@ -165,8 +217,8 @@ class TemplateVariableTest extends TestCase
         $safeInput = 'hello world';
         $dangerousInput = '<script>alert("XSS")</script>';
         
-        $safeVar = new TemplateVariable($safeInput);
-        $dangerousVar = new TemplateVariable($dangerousInput);
+        $safeVar = TemplateVariable::create($safeInput);
+        $dangerousVar = TemplateVariable::create($dangerousInput);
         
         // Safe input shouldn't need escaping for HTML
         $this->assertFalse($safeVar->needsEscaping('html'));
@@ -184,7 +236,7 @@ class TemplateVariableTest extends TestCase
      */
     public function testInvalidContextThrowsException(): void
     {
-        $var = new TemplateVariable('test');
+        $var = TemplateVariable::create('test');
         
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Unknown escape context: invalid');
@@ -197,14 +249,30 @@ class TemplateVariableTest extends TestCase
      */
     public function testTypedValueIntegration(): void
     {
-        // Create a mock TypedValue object
-        $typedValue = new class {
+        // Create a mock TypedValue object that implements Typed interface
+        $typedValue = new class implements \dzentota\TypedValue\Typed {
             public function toNative(): string {
                 return '<script>alert("from TypedValue")</script>';
             }
+            
+            public static function fromNative($value): static {
+                return new static();
+            }
+            
+            public static function tryParse($value, ?\dzentota\TypedValue\Typed &$typed = null, ?\dzentota\TypedValue\ValidationResult &$result = null): bool {
+                return true;
+            }
+            
+            public function isNull(): bool {
+                return false;
+            }
+            
+            public function isSame(\dzentota\TypedValue\Typed $object): bool {
+                return $this === $object;
+            }
         };
         
-        $var = new TemplateVariable($typedValue);
+        $var = TemplateVariable::create($typedValue);
         
         // Should extract value using toNative() and then escape it
         $expected = '&lt;script&gt;alert(&quot;from TypedValue&quot;)&lt;/script&gt;';
@@ -217,26 +285,25 @@ class TemplateVariableTest extends TestCase
     public function testScalarValuesNotEscaped(): void
     {
         // Test different scalar types
-        $boolVar = new TemplateVariable(true);
+        $boolVar = TemplateVariable::create(true);
         $this->assertEquals('1', (string) $boolVar);
         
-        $boolFalseVar = new TemplateVariable(false);
+        $boolFalseVar = TemplateVariable::create(false);
         $this->assertEquals('', (string) $boolFalseVar);
         
-        $intVar = new TemplateVariable(42);
+        $intVar = TemplateVariable::create(42);
         $this->assertEquals('42', (string) $intVar);
         
-        $floatVar = new TemplateVariable(3.14);
+        $floatVar = TemplateVariable::create(3.14);
         $this->assertEquals('3.14', (string) $floatVar);
         
-        $nullVar = new TemplateVariable(null);
-        $this->assertEquals('', (string) $nullVar);
+        $nullVar = TemplateVariable::create(null);
+        $this->assertNull($nullVar); // null is not a scalar, so it's returned as-is
         
         // Scalar values should not need escaping
         $this->assertFalse($intVar->needsEscaping('html'));
         $this->assertFalse($floatVar->needsEscaping('html'));
         $this->assertFalse($boolVar->needsEscaping('html'));
-        $this->assertFalse($nullVar->needsEscaping('html'));
     }
     
     /**
@@ -245,13 +312,29 @@ class TemplateVariableTest extends TestCase
     public function testTypedValueWithScalarResult(): void
     {
         // TypedValue that returns a scalar
-        $typedValue = new class {
+        $typedValue = new class implements \dzentota\TypedValue\Typed {
             public function toNative(): int {
                 return 42;
             }
+            
+            public static function fromNative($value): static {
+                return new static();
+            }
+            
+            public static function tryParse($value, ?\dzentota\TypedValue\Typed &$typed = null, ?\dzentota\TypedValue\ValidationResult &$result = null): bool {
+                return true;
+            }
+            
+            public function isNull(): bool {
+                return false;
+            }
+            
+            public function isSame(\dzentota\TypedValue\Typed $object): bool {
+                return $this === $object;
+            }
         };
         
-        $var = new TemplateVariable($typedValue);
+        $var = TemplateVariable::create($typedValue);
         
         // Should return scalar as string without escaping
         $this->assertEquals('42', (string) $var);
@@ -269,7 +352,7 @@ class TemplateVariableTest extends TestCase
             }
         };
         
-        $var = new TemplateVariable($stringable);
+        $var = TemplateVariable::create($stringable);
         
         // Should escape stringable content
         $expected = '&lt;script&gt;alert(&quot;from Stringable&quot;)&lt;/script&gt;';
@@ -277,17 +360,16 @@ class TemplateVariableTest extends TestCase
     }
     
     /**
-     * Test invalid value type throws exception
+     * Test non-escapable value type returns as-is 
      */
-    public function testInvalidValueTypeThrowsException(): void
+    public function testNonEscapableValueTypeReturnsAsIs(): void
     {
         $invalidValue = new \stdClass();
-        $var = new TemplateVariable($invalidValue);
+        $result = TemplateVariable::create($invalidValue);
         
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Value must be string, Stringable, TypedValue, or scalar');
-        
-        (string) $var;
+        // Should return the object as-is, not a TemplateVariable
+        $this->assertEquals($invalidValue, $result);
+        $this->assertNotInstanceOf(TemplateVariable::class, $result);
     }
     
     /**
@@ -305,7 +387,7 @@ class TemplateVariableTest extends TestCase
             }
         };
         
-        $var = new TemplateVariable('test', EscapeContext::HTML, $customEscaper);
+        $var = TemplateVariable::create('test', EscapeContext::HTML, $customEscaper);
         
         $this->assertEquals('CUSTOM: test', (string) $var);
     }
@@ -316,12 +398,12 @@ class TemplateVariableTest extends TestCase
     public function testRealisticUsageScenarios(): void
     {
         // Scenario 1: User input in HTML content
-        $userName = new TemplateVariable('<script>alert(1)</script>');
+        $userName = TemplateVariable::create('<script>alert(1)</script>');
         $html = "<p>Welcome, {$userName}!</p>";
         $this->assertStringNotContainsString('<script>', $html);
         
         // Scenario 2: User input in HTML attributes
-        $userClass = new TemplateVariable('" onload="alert(1)" class="');
+        $userClass = TemplateVariable::create('" onload="alert(1)" class="');
         $safeClass = $userClass('attr');
         $html = "<div class=\"user-input {$safeClass}\">Content</div>";
         // The dangerous pattern should be escaped, so quotes should be escaped
@@ -329,13 +411,13 @@ class TemplateVariableTest extends TestCase
         $this->assertStringNotContainsString('" onload="alert(1)"', $html);
         
         // Scenario 3: Data in JavaScript
-        $userData = new TemplateVariable('</script><script>alert(1)</script>');
+        $userData = TemplateVariable::create('</script><script>alert(1)</script>');
         $safeData = $userData('js');
         $js = "var data = '{$safeData}';";
         $this->assertStringNotContainsString('</script>', $js);
         
         // Scenario 4: Safe numeric values
-        $userId = new TemplateVariable(12345);
+        $userId = TemplateVariable::create(12345);
         $this->assertEquals('12345', (string) $userId);
         $this->assertFalse($userId->needsEscaping('html'));
     }

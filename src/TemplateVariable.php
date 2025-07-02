@@ -7,6 +7,7 @@ namespace Dzentota\TemplateVariable;
 use Dzentota\TemplateVariable\Context\EscapeContext;
 use Dzentota\TemplateVariable\Escaper\EscaperInterface;
 use Dzentota\TemplateVariable\Escaper\ContextAwareEscaper;
+use dzentota\TypedValue\Typed;
 use Stringable;
 
 /**
@@ -16,13 +17,13 @@ use Stringable;
  * automatic context-aware escaping for template variables. It supports both implicit
  * escaping via __toString() and explicit context specification via __invoke().
  * 
- * Supported value types:
- * - string|Stringable: Escaped according to context
- * - TypedValue (dzentota\TypedValue\Typed): Value extracted with toNative() then processed
- * - scalar values (bool, float, int, null): Returned as-is (not tainted)
+ * Smart value handling via create() method:
+ * - Scalars, Stringable, and TypedValue objects: wrapped in TemplateVariable for escaping
+ * - Arrays and other objects: returned as-is to preserve natural behavior
  * 
  * Usage examples:
- * - $name->__toString() or (string)$name - auto-escapes for HTML context
+ * - $name = TemplateVariable::create('<script>'); echo $name; // auto-escaped
+ * - $data = TemplateVariable::create(['key' => 'value']); // returns array as-is
  * - $name('html') - explicitly escape for HTML context
  * - $class('attr') - explicitly escape for HTML attribute context
  * - $script('js') - explicitly escape for JavaScript context
@@ -33,11 +34,13 @@ class TemplateVariable
     private readonly EscapeContext $defaultContext;
     
     /**
-     * @param mixed $value The value to be escaped (string, Stringable, TypedValue, or scalar)
+     * Private constructor - use create() static method instead
+     * 
+     * @param mixed $value The value to be escaped
      * @param EscapeContext $defaultContext The default escaping context (defaults to HTML)
      * @param EscaperInterface|null $escaper Custom escaper (defaults to ContextAwareEscaper)
      */
-    public function __construct(
+    private function __construct(
         private readonly mixed $value,
         EscapeContext $defaultContext = EscapeContext::HTML,
         ?EscaperInterface $escaper = null
@@ -83,11 +86,11 @@ class TemplateVariable
     /**
      * Get the raw value without any escaping
      * 
-     * @return string The raw value
+     * @return mixed The raw value
      */
-    public function getRaw(): string
+    public function getRaw(): mixed
     {
-        return $this->getStringValue();
+        return $this->value;
     }
     
     /**
@@ -118,7 +121,7 @@ class TemplateVariable
     private function processValue(): mixed
     {
         // Handle TypedValue objects (dzentota\TypedValue\Typed interface)
-        if (is_object($this->value) && method_exists($this->value, 'toNative')) {
+        if ($this->value instanceof Typed) {
             return $this->value->toNative();
         }
         
@@ -143,7 +146,9 @@ class TemplateVariable
             is_null($processedValue) => '',
             is_scalar($processedValue) => (string) $processedValue,
             default => throw new \InvalidArgumentException(
-                'Value must be string, Stringable, TypedValue, or scalar. Got: ' . get_debug_type($processedValue)
+                'Cannot convert ' . get_debug_type($processedValue) . ' to string. ' .
+                'Use TemplateVariable::fromString(), fromTypedValue(), fromScalar(), or fromMixed() ' .
+                'for explicit type handling.'
             )
         };
     }
@@ -186,6 +191,28 @@ class TemplateVariable
             'raw', 'none', 'r' => EscapeContext::RAW,
             default => throw new \InvalidArgumentException("Unknown escape context: {$context}")
         };
+    }
+    
+    /**
+     * Create a TemplateVariable or return the value as-is for non-escapable types
+     * 
+     * For scalars, Stringable objects, and TypedValue objects, creates a TemplateVariable for escaping.
+     * For arrays and other objects, returns the value as-is to preserve behavior.
+     * 
+     * @param mixed $value
+     * @param EscapeContext $defaultContext
+     * @param EscaperInterface|null $escaper
+     * @return mixed TemplateVariable instance or the original value
+     */
+    public static function create(
+        mixed $value,
+        EscapeContext $defaultContext = EscapeContext::HTML,
+        ?EscaperInterface $escaper = null
+    ): mixed {
+        if (!is_scalar($value) && !($value instanceof Typed) && !($value instanceof Stringable)) {
+            return $value;
+        }
+        return new static($value, $defaultContext, $escaper);
     }
     
     /**

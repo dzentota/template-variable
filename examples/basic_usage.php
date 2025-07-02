@@ -5,14 +5,13 @@ declare(strict_types=1);
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Dzentota\TemplateVariable\TemplateVariable;
-use Dzentota\TemplateVariable\Context\EscapeContext;
 
 echo "=== TemplateVariable Library Examples ===\n\n";
 
 // Example 1: Basic string escaping
 echo "1. Basic String Escaping:\n";
 $userInput = '<script>alert("XSS Attack!")</script>';
-$var = new TemplateVariable($userInput);
+$var = TemplateVariable::create($userInput);
 
 echo "Original: " . $userInput . "\n";
 echo "Auto-escaped: " . $var . "\n";
@@ -21,7 +20,7 @@ echo "Explicit HTML: " . $var('html') . "\n\n";
 // Example 2: Attribute injection protection
 echo "2. Attribute Injection Protection:\n";
 $maliciousClass = '" onload="alert(1)" class="';
-$classVar = new TemplateVariable($maliciousClass);
+$classVar = TemplateVariable::create($maliciousClass);
 
 echo "Original: " . $maliciousClass . "\n";
 echo "Safe for attributes: " . $classVar('attr') . "\n";
@@ -30,7 +29,7 @@ echo "HTML: <div class=\"user-input " . $classVar('attr') . "\">Content</div>\n\
 // Example 3: JavaScript context
 echo "3. JavaScript Context Escaping:\n";
 $jsData = '</script><script>alert("XSS")</script>';
-$jsVar = new TemplateVariable($jsData);
+$jsVar = TemplateVariable::create($jsData);
 
 echo "Original: " . $jsData . "\n";
 echo "Safe for JS: " . $jsVar('js') . "\n";
@@ -39,7 +38,7 @@ echo "JavaScript: var data = '" . $jsVar('js') . "';\n\n";
 // Example 4: Multiple contexts
 echo "4. Multiple Context Examples:\n";
 $data = 'Hello "World" & <Friends>';
-$multiVar = new TemplateVariable($data);
+$multiVar = TemplateVariable::create($data);
 
 echo "Original: " . $data . "\n";
 echo "HTML: " . $multiVar('html') . "\n";
@@ -51,48 +50,71 @@ echo "Raw: " . $multiVar('raw') . "\n\n";
 
 // Example 5: Scalar values (not tainted)
 echo "5. Scalar Values (Not Tainted):\n";
-$boolVar = new TemplateVariable(true);
-$intVar = new TemplateVariable(42);
-$floatVar = new TemplateVariable(3.14159);
-$nullVar = new TemplateVariable(null);
+$boolVar = TemplateVariable::create(true);
+$intVar = TemplateVariable::create(42);
+$floatVar = TemplateVariable::create(3.14159);
+$nullVar = TemplateVariable::create(null);
 
 echo "Boolean true: " . $boolVar . " (needs escaping: " . ($boolVar->needsEscaping('html') ? 'yes' : 'no') . ")\n";
 echo "Integer: " . $intVar . " (needs escaping: " . ($intVar->needsEscaping('html') ? 'yes' : 'no') . ")\n";
 echo "Float: " . $floatVar . " (needs escaping: " . ($floatVar->needsEscaping('html') ? 'yes' : 'no') . ")\n";
-echo "Null: '" . $nullVar . "' (needs escaping: " . ($nullVar->needsEscaping('html') ? 'yes' : 'no') . ")\n\n";
+echo "Null: '" . ($nullVar ?? 'null') . "' (returned as-is, not wrapped)\n\n";
 
-// Example 6: TypedValue integration
-echo "6. TypedValue Integration:\n";
+// Example 6: TypedValue integration vs regular objects
+echo "6. TypedValue Integration vs Regular Objects:\n";
 
-// Mock TypedValue object that returns a string
-$typedValueString = new class {
-    public function toNative(): string {
-        return '<script>alert("From TypedValue")</script>';
+// Proper TypedValue that implements dzentota\TypedValue\Typed interface
+$realTypedValue = new class implements \dzentota\TypedValue\Typed {
+    public function toNative(): string
+    {
+        return '<script>alert("From Real TypedValue")</script>';
+    }
+    
+    public static function fromNative($value): static
+    {
+        return new static();
+    }
+    
+    public static function tryParse($value, ?\dzentota\TypedValue\Typed &$typed = null, ?\dzentota\TypedValue\ValidationResult &$result = null): bool
+    {
+        return true;
+    }
+    
+    public function isNull(): bool
+    {
+        return false;
+    }
+    
+    public function isSame(\dzentota\TypedValue\Typed $object): bool
+    {
+        return $this === $object;
     }
 };
 
-// Mock TypedValue object that returns a scalar
-$typedValueInt = new class {
-    public function toNative(): int {
-        return 12345;
+// Regular object with toNative() method (NOT implementing Typed interface)
+$regularObject = new class {
+    public function toNative(): string
+    {
+        return '<script>alert("From Regular Object")</script>';
     }
 };
 
-$tvString = new TemplateVariable($typedValueString);
-$tvInt = new TemplateVariable($typedValueInt);
+$realTv = TemplateVariable::create($realTypedValue);
+$regularObj = TemplateVariable::create($regularObject);
 
-echo "TypedValue (string): " . $tvString . "\n";
-echo "TypedValue (int): " . $tvInt . " (needs escaping: " . ($tvInt->needsEscaping('html') ? 'yes' : 'no') . ")\n\n";
+echo "Real TypedValue: " . $realTv . " (extracted via toNative() and escaped)\n";
+echo "Regular object: " . get_class($regularObj) . " (returned as-is, toNative() ignored)\n\n";
 
 // Example 7: Stringable objects
 echo "7. Stringable Objects:\n";
 $stringable = new class implements Stringable {
-    public function __toString(): string {
+    public function __toString(): string
+    {
         return '<em>Stringable content</em>';
     }
 };
 
-$stringableVar = new TemplateVariable($stringable);
+$stringableVar = TemplateVariable::create($stringable);
 echo "Stringable: " . $stringableVar . "\n\n";
 
 // Example 8: Static factory methods
@@ -109,10 +131,10 @@ echo "Raw factory: " . TemplateVariable::raw($content) . "\n\n";
 echo "9. Realistic Template Usage:\n";
 
 // Simulate template variables
-$userName = new TemplateVariable('<script>alert("XSS")</script>');
-$userId = new TemplateVariable(12345);
-$userClass = new TemplateVariable('" onload="alert(1)" class="');
-$userComment = new TemplateVariable('Check out this link: </script><script>alert(1)</script>');
+$userName = TemplateVariable::create('<script>alert("XSS")</script>');
+$userId = TemplateVariable::create(12345);
+$userClass = TemplateVariable::create('" onload="alert(1)" class="');
+$userComment = TemplateVariable::create('Check out this link: </script><script>alert(1)</script>');
 
 // Template with automatic escaping
 $template = <<<HTML
@@ -150,7 +172,7 @@ echo "❌ BEFORE (vulnerable):\n";
 echo "   <div>" . $dangerousInput . "</div>\n";
 
 echo "✅ AFTER (secure):\n";
-$safeVar = new TemplateVariable($dangerousInput);
+$safeVar = TemplateVariable::create($dangerousInput);
 echo "   <div>" . $safeVar . "</div>\n";
 
 echo "\n=== Examples Complete ===\n"; 

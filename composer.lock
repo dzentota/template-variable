@@ -4,8 +4,54 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "c9976ecefa0b03fafc4c3cb520e691e4",
-    "packages": [],
+    "content-hash": "99ae3fc31c5cbc4674978701815b0049",
+    "packages": [
+        {
+            "name": "dzentota/typedvalue",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/dzentota/typedvalue.git",
+                "reference": "34a0533e723040a17f18e8f433d1ad25bb472dc8"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/dzentota/typedvalue/zipball/34a0533e723040a17f18e8f433d1ad25bb472dc8",
+                "reference": "34a0533e723040a17f18e8f433d1ad25bb472dc8",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^7.4 || ^8.0"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^6.2 || ^9.3"
+            },
+            "default-branch": true,
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "dzentota\\TypedValue\\": "src/",
+                    "tests\\dzentota\\TypedValue\\": "tests/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Alex Tatulchenkov",
+                    "email": "webtota@gmail.com"
+                }
+            ],
+            "description": "A PHP 7.4 typed values (value objects) helper library.",
+            "support": {
+                "issues": "https://github.com/dzentota/typedvalue/issues",
+                "source": "https://github.com/dzentota/typedvalue/tree/master"
+            },
+            "time": "2025-06-30T18:13:00+00:00"
+        }
+    ],
     "packages-dev": [
         {
             "name": "clue/ndjson-react",
@@ -4163,8 +4209,10 @@
         }
     ],
     "aliases": [],
-    "minimum-stability": "stable",
-    "stability-flags": {},
+    "minimum-stability": "dev",
+    "stability-flags": {
+        "dzentota/typedvalue": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
