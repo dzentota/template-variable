@@ -5,88 +5,152 @@ declare(strict_types=1);
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Dzentota\TemplateVariable\TemplateVariable;
-use Dzentota\TemplateVariable\Value\SimpleTypedValue;
+use Dzentota\TemplateVariable\Context\EscapeContext;
 
-echo "=== TemplateVariable Basic Usage Examples ===\n\n";
+echo "=== TemplateVariable Library Examples ===\n\n";
 
-// Example 1: Basic automatic escaping (HTML context by default)
-echo "1. Basic automatic escaping:\n";
-$name = new TemplateVariable('<script>alert("xss")</script>User Name');
-echo "Raw: " . $name->getRaw() . "\n";
-echo "Auto-escaped: $name\n"; // Uses __toString() magic method
-echo "Explicit HTML: " . $name('html') . "\n\n";
+// Example 1: Basic string escaping
+echo "1. Basic String Escaping:\n";
+$userInput = '<script>alert("XSS Attack!")</script>';
+$var = new TemplateVariable($userInput);
 
-// Example 2: Attribute context escaping
-echo "2. Attribute context escaping:\n";
-$class = new TemplateVariable('class="malicious" onclick="alert(1)"');
-echo "Raw: " . $class->getRaw() . "\n";
-echo "For HTML: $class\n"; // Default HTML context
-echo "For attribute: " . $class('attr') . "\n\n";
+echo "Original: " . $userInput . "\n";
+echo "Auto-escaped: " . $var . "\n";
+echo "Explicit HTML: " . $var('html') . "\n\n";
 
-// Example 3: JavaScript context escaping  
-echo "3. JavaScript context escaping:\n";
-$jsData = new TemplateVariable('</script><script>alert("xss")</script>');
-echo "Raw: " . $jsData->getRaw() . "\n";
-echo "For JavaScript: " . $jsData('js') . "\n\n";
+// Example 2: Attribute injection protection
+echo "2. Attribute Injection Protection:\n";
+$maliciousClass = '" onload="alert(1)" class="';
+$classVar = new TemplateVariable($maliciousClass);
 
-// Example 4: URL context escaping
-echo "4. URL context escaping:\n";
-$urlParam = new TemplateVariable('hello world & special chars!');
-echo "Raw: " . $urlParam->getRaw() . "\n";
-echo "For URL: " . $urlParam('url') . "\n\n";
+echo "Original: " . $maliciousClass . "\n";
+echo "Safe for attributes: " . $classVar('attr') . "\n";
+echo "HTML: <div class=\"user-input " . $classVar('attr') . "\">Content</div>\n\n";
 
-// Example 5: CSS context escaping
-echo "5. CSS context escaping:\n";
-$cssValue = new TemplateVariable('color: red; }</style><script>alert(1)</script>');
-echo "Raw: " . $cssValue->getRaw() . "\n";
-echo "For CSS: " . $cssValue('css') . "\n\n";
+// Example 3: JavaScript context
+echo "3. JavaScript Context Escaping:\n";
+$jsData = '</script><script>alert("XSS")</script>';
+$jsVar = new TemplateVariable($jsData);
 
-// Example 6: Using with TypedValue objects
-echo "6. Using with TypedValue objects:\n";
-$typedValue = SimpleTypedValue::unsafe('<b>Bold Text</b>', 'html');
-$templateVar = new TemplateVariable($typedValue);
-echo "From TypedValue: $templateVar\n";
+echo "Original: " . $jsData . "\n";
+echo "Safe for JS: " . $jsVar('js') . "\n";
+echo "JavaScript: var data = '" . $jsVar('js') . "';\n\n";
 
-$safeTypedValue = SimpleTypedValue::safe('&lt;b&gt;Already Escaped&lt;/b&gt;', 'html');
-$safeTemplateVar = new TemplateVariable($safeTypedValue);
-echo "From safe TypedValue: $safeTemplateVar\n\n";
+// Example 4: Multiple contexts
+echo "4. Multiple Context Examples:\n";
+$data = 'Hello "World" & <Friends>';
+$multiVar = new TemplateVariable($data);
 
-// Example 7: Using static factory methods
-echo "7. Static factory methods:\n";
-$htmlVar = TemplateVariable::html('<p>Paragraph</p>');
-$attrVar = TemplateVariable::attr('value="test"');
-$jsVar = TemplateVariable::js('var x = "data";');
-$urlVar = TemplateVariable::url('hello world');
-$rawVar = TemplateVariable::raw('<em>Not escaped</em>');
+echo "Original: " . $data . "\n";
+echo "HTML: " . $multiVar('html') . "\n";
+echo "Attribute: " . $multiVar('attr') . "\n";
+echo "JavaScript: " . $multiVar('js') . "\n";
+echo "URL: " . $multiVar('url') . "\n";
+echo "CSS: " . $multiVar('css') . "\n";
+echo "Raw: " . $multiVar('raw') . "\n\n";
 
-echo "HTML context: $htmlVar\n";
-echo "Attr context: $attrVar\n";
-echo "JS context: $jsVar\n";
-echo "URL context: $urlVar\n";
-echo "Raw context: $rawVar\n\n";
+// Example 5: Scalar values (not tainted)
+echo "5. Scalar Values (Not Tainted):\n";
+$boolVar = new TemplateVariable(true);
+$intVar = new TemplateVariable(42);
+$floatVar = new TemplateVariable(3.14159);
+$nullVar = new TemplateVariable(null);
 
-// Example 8: Template usage simulation
-echo "8. Template usage simulation:\n";
-$userName = new TemplateVariable('<script>alert("xss")</script>John');
-$userClass = new TemplateVariable('user-card" onclick="alert(1)');
-$userScript = new TemplateVariable('alert("xss")');
+echo "Boolean true: " . $boolVar . " (needs escaping: " . ($boolVar->needsEscaping('html') ? 'yes' : 'no') . ")\n";
+echo "Integer: " . $intVar . " (needs escaping: " . ($intVar->needsEscaping('html') ? 'yes' : 'no') . ")\n";
+echo "Float: " . $floatVar . " (needs escaping: " . ($floatVar->needsEscaping('html') ? 'yes' : 'no') . ")\n";
+echo "Null: '" . $nullVar . "' (needs escaping: " . ($nullVar->needsEscaping('html') ? 'yes' : 'no') . ")\n\n";
 
-echo "<!-- Traditional PHP template with manual escaping -->\n";
-echo "<span class=\"user\"><?=htmlspecialchars(\$userName);?></span>\n\n";
+// Example 6: TypedValue integration
+echo "6. TypedValue Integration:\n";
 
-echo "<!-- With TemplateVariable - automatic escaping -->\n";
-echo "<span class=\"user\">$userName</span>\n\n";
+// Mock TypedValue object that returns a string
+$typedValueString = new class {
+    public function toNative(): string {
+        return '<script>alert("From TypedValue")</script>';
+    }
+};
 
-echo "<!-- With TemplateVariable - explicit context -->\n";
-echo "<span class=\"" . $userClass('attr') . "\">$userName</span>\n";
-echo "<script>var userData = " . $userScript('js') . ";</script>\n\n";
+// Mock TypedValue object that returns a scalar
+$typedValueInt = new class {
+    public function toNative(): int {
+        return 12345;
+    }
+};
 
-// Example 9: Checking if escaping is needed
-echo "9. Checking if escaping is needed:\n";
-$safeText = new TemplateVariable('Simple text');
-$unsafeText = new TemplateVariable('<script>alert(1)</script>');
+$tvString = new TemplateVariable($typedValueString);
+$tvInt = new TemplateVariable($typedValueInt);
 
-echo "Safe text needs HTML escaping: " . ($safeText->needsEscaping('html') ? 'yes' : 'no') . "\n";
-echo "Unsafe text needs HTML escaping: " . ($unsafeText->needsEscaping('html') ? 'yes' : 'no') . "\n";
+echo "TypedValue (string): " . $tvString . "\n";
+echo "TypedValue (int): " . $tvInt . " (needs escaping: " . ($tvInt->needsEscaping('html') ? 'yes' : 'no') . ")\n\n";
 
-echo "\n=== End of Examples ===\n"; 
+// Example 7: Stringable objects
+echo "7. Stringable Objects:\n";
+$stringable = new class implements Stringable {
+    public function __toString(): string {
+        return '<em>Stringable content</em>';
+    }
+};
+
+$stringableVar = new TemplateVariable($stringable);
+echo "Stringable: " . $stringableVar . "\n\n";
+
+// Example 8: Static factory methods
+echo "8. Static Factory Methods:\n";
+$content = '<b>Bold Text</b>';
+
+echo "HTML factory: " . TemplateVariable::html($content) . "\n";
+echo "Attr factory: " . TemplateVariable::attr($content) . "\n";
+echo "JS factory: " . TemplateVariable::js($content) . "\n";
+echo "URL factory: " . TemplateVariable::url($content) . "\n";
+echo "Raw factory: " . TemplateVariable::raw($content) . "\n\n";
+
+// Example 9: Realistic template usage
+echo "9. Realistic Template Usage:\n";
+
+// Simulate template variables
+$userName = new TemplateVariable('<script>alert("XSS")</script>');
+$userId = new TemplateVariable(12345);
+$userClass = new TemplateVariable('" onload="alert(1)" class="');
+$userComment = new TemplateVariable('Check out this link: </script><script>alert(1)</script>');
+
+// Template with automatic escaping
+$template = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Profile</title>
+</head>
+<body>
+    <div class="user-profile {$userClass('attr')}">
+        <h1>Welcome, {$userName}!</h1>
+        <p>User ID: {$userId}</p>
+        <div class="comment">{$userComment}</div>
+    </div>
+    
+    <script>
+        var user = {
+            name: '{$userName('js')}',
+            id: {$userId('js')},
+            comment: '{$userComment('js')}'
+        };
+        console.log('User data:', user);
+    </script>
+</body>
+</html>
+HTML;
+
+echo $template . "\n\n";
+
+// Example 10: Before and after comparison
+echo "10. Before/After Comparison:\n";
+$dangerousInput = '<img src="x" onerror="alert(\'XSS\')">';
+
+echo "❌ BEFORE (vulnerable):\n";
+echo "   <div>" . $dangerousInput . "</div>\n";
+
+echo "✅ AFTER (secure):\n";
+$safeVar = new TemplateVariable($dangerousInput);
+echo "   <div>" . $safeVar . "</div>\n";
+
+echo "\n=== Examples Complete ===\n"; 

@@ -5,6 +5,16 @@
 
 A secure template variable library that provides context-aware escaping for PHP templates, supporting the [AppSec Manifesto](https://github.com/dzentota/AppSecManifesto) principles by automatically preventing XSS vulnerabilities through intelligent output escaping.
 
+## 🚀 Features
+
+- **🔒 Automatic Context-Aware Escaping** - Default HTML escaping via `__toString()` magic method
+- **🎯 Explicit Context Control** - Specify exact context via `__invoke()` method  
+- **🏷️ TypedValue Integration** - Works with [dzentota/typedvalue](https://github.com/dzentota/typedvalue) objects
+- **⚡ Scalar Value Safety** - Treats scalar values (int, float, bool, null) as safe (not tainted)
+- **🌐 Multiple Context Support** - HTML, attributes, JavaScript, CSS, URL, and raw contexts
+- **🔧 Extensible Design** - Pluggable escaper interface for custom implementations
+- **🧪 Fully Tested** - Comprehensive test suite with realistic attack vectors
+
 ## Why TemplateVariable?
 
 Most template engines provide security through escaping, but they require developers to remember to escape values or use specific syntax. TemplateVariable brings this security directly into your PHP variables using magic methods, making secure templates the default behavior.
@@ -29,127 +39,323 @@ With TemplateVariable, escaping happens automatically:
 <script>var data = <?= $jsData('js'); ?>;</script>
 ```
 
-## Installation
+## 📦 Installation
 
 ```bash
 composer require dzentota/template-variable
 ```
 
-## Basic Usage
+## 🎯 Core Concept
 
-### Automatic HTML Escaping
+Transform this vulnerable pattern:
+```php
+<!-- ❌ VULNERABLE -->
+<span><?= $userInput; ?></span>
+<div class="<?= $className; ?>">Content</div>
+<script>var data = '<?= $jsonData; ?>';</script>
+```
+
+Into this secure pattern:
+```php
+<!-- ✅ SECURE -->
+<span><?= $userInput; ?></span>                    <!-- Auto-escaped for HTML -->
+<div class="<?= $className('attr'); ?>">Content</div>    <!-- Explicit attribute context -->
+<script>var data = '<?= $jsonData('js'); ?>';</script>    <!-- Explicit JavaScript context -->
+```
+
+## 💡 Value Type Support
+
+TemplateVariable intelligently handles different value types:
+
+- **Strings & Stringable** - Escaped according to context
+- **TypedValue objects** - Value extracted with `toNative()`, then processed
+- **Scalar values** (bool, float, int, null) - Returned as-is (not tainted)
+- **Custom objects** - Must implement `Stringable` or have `toNative()` method
+
+## 📚 Quick Start
+
+### Basic Usage
 
 ```php
 use Dzentota\TemplateVariable\TemplateVariable;
 
-$name = new TemplateVariable('<script>alert("xss")</script>John');
-echo $name; // Output: &lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;John
+// Automatic HTML escaping
+$name = new TemplateVariable('<script>alert("XSS")</script>');
+echo $name; // &lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;
+
+// Explicit context escaping  
+$attr = new TemplateVariable('" onload="alert(1)" class="');
+echo $attr('attr'); // &quot; onload=&quot;alert(1)&quot; class=&quot;
+
+// Multiple contexts
+$data = new TemplateVariable('</script><script>alert(1)</script>');
+echo $data('html'); // &lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;
+echo $data('js');   // \u003C\/script\u003E\u003Cscript\u003Ealert(1)\u003C\/script\u003E
+echo $data('url');  // %3C%2Fscript%3E%3Cscript%3Ealert%281%29%3C%2Fscript%3E
 ```
 
-### Context-Specific Escaping
+### TypedValue Integration
 
 ```php
-$class = new TemplateVariable('user-card" onclick="alert(1)');
-$jsData = new TemplateVariable('</script><script>alert("xss")</script>');
-$url = new TemplateVariable('hello world & special chars');
+// Works with dzentota/typedvalue objects
+use Some\TypedValue\Email;
 
-// Different contexts require different escaping
-echo $class('attr');  // For HTML attributes
-echo $jsData('js');   // For JavaScript context  
-echo $url('url');     // For URL parameters
+$email = Email::fromNative('user@example.com');
+$template = new TemplateVariable($email);
+echo $template; // user@example.com (extracted via toNative())
+
+// TypedValue returning malicious content gets escaped
+$maliciousTyped = new class {
+    public function toNative(): string {
+        return '<script>alert("XSS")</script>';
+    }
+};
+$var = new TemplateVariable($maliciousTyped);
+echo $var; // &lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;
 ```
 
-## Magic Methods
+### Scalar Value Safety
 
-TemplateVariable uses PHP's magic methods to provide seamless integration:
+```php
+// Scalar values are treated as safe (not tainted)
+$userId = new TemplateVariable(12345);
+$isActive = new TemplateVariable(true);
+$price = new TemplateVariable(99.99);
 
-### `__toString()` - Automatic Escaping
+echo $userId;   // 12345
+echo $isActive; // 1
+echo $price;    // 99.99
 
-When used in a string context, automatically applies HTML escaping:
+// No escaping needed for scalars
+var_dump($userId->needsEscaping('html')); // false
+```
 
+## 🎨 Context Support
+
+### HTML Context (Default)
 ```php
 $var = new TemplateVariable('<b>Bold</b>');
-echo "Hello $var"; // Automatically escaped
-echo $var;         // Automatically escaped
+echo $var;          // &lt;b&gt;Bold&lt;/b&gt;
+echo $var('html');  // &lt;b&gt;Bold&lt;/b&gt;
 ```
 
-### `__invoke()` - Explicit Context
-
-Explicitly specify the escaping context:
-
+### Attribute Context
 ```php
-$var = new TemplateVariable('data & more data');
-
-echo $var('html');  // HTML context
-echo $var('attr');  // HTML attribute context
-echo $var('js');    // JavaScript context
-echo $var('url');   // URL context
-echo $var('css');   // CSS context
-echo $var('raw');   // No escaping
+$class = new TemplateVariable('" onclick="alert(1)" class="');
+echo "<div class=\"{$class('attr')}\">"; // Safe attribute injection prevention
 ```
 
-## Supported Contexts
-
-| Context | Method | Usage | Escaping Applied |
-|---------|--------|--------|------------------|
-| HTML | `$var('html')` or `$var` | HTML content | `htmlspecialchars()` |
-| Attribute | `$var('attr')` | HTML attributes | `htmlspecialchars()` with quotes |
-| JavaScript | `$var('js')` | JavaScript code | `json_encode()` with flags |
-| CSS | `$var('css')` | CSS values | CSS-specific escaping |
-| URL | `$var('url')` | URL parameters | `rawurlencode()` |
-| Raw | `$var('raw')` | No escaping needed | No escaping |
-
-## TypedValue Integration
-
-TemplateVariable is designed to work with TypedValue objects from the [dzentota/typedvalue](https://github.com/dzentota/typedvalue) library:
-
+### JavaScript Context
 ```php
-use Dzentota\TemplateVariable\Value\SimpleTypedValue;
-
-$typedValue = SimpleTypedValue::unsafe('<script>alert("xss")</script>', 'string');
-$templateVar = new TemplateVariable($typedValue);
-echo $templateVar; // Properly escaped
+$data = new TemplateVariable('</script><script>alert(1)</script>');
+echo "var x = '{$data('js')}';"; // Flexible escaping without quotes
 ```
 
-## Static Factory Methods
-
-For convenience, use static factory methods:
-
+### CSS Context
 ```php
-$htmlVar = TemplateVariable::html('<p>Content</p>');
-$attrVar = TemplateVariable::attr('class-name');
-$jsVar = TemplateVariable::js('user input');
-$urlVar = TemplateVariable::url('query param');
-$rawVar = TemplateVariable::raw('<b>trusted content</b>');
+$style = new TemplateVariable('color: red; </style><script>alert(1)</script>');
+echo "body { content: '{$style('css')}'; }";
 ```
 
-## Template Usage Examples
+### URL Context
+```php
+$param = new TemplateVariable('hello world & more');
+echo "https://example.com?q={$param('url')}";
+```
 
-### Before (Manual Escaping)
+### Raw Context (No Escaping)
+```php
+$trusted = new TemplateVariable('<em>Trusted HTML</em>');
+echo $trusted('raw'); // <em>Trusted HTML</em> - no escaping
+```
+
+## 🏭 Static Factory Methods
 
 ```php
-<div class="<?= htmlspecialchars($userClass, ENT_QUOTES); ?>">
-    <h1><?= htmlspecialchars($title); ?></h1>
-    <p><?= htmlspecialchars($description); ?></p>
-    <script>
-        var userData = <?= json_encode($jsData); ?>;
-    </script>
-    <a href="?search=<?= rawurlencode($searchTerm); ?>">Search</a>
+// Context-specific factory methods
+$html = TemplateVariable::html('<script>');
+$attr = TemplateVariable::attr('" onclick="');
+$js = TemplateVariable::js('</script>');
+$css = TemplateVariable::css('</style>');
+$url = TemplateVariable::url('hello world');
+$raw = TemplateVariable::raw('<b>trusted</b>');
+```
+
+## 🛡️ Security Examples
+
+### Realistic Attack Vectors
+
+```php
+// Attribute injection attack
+$userClass = new TemplateVariable('" onload="alert(1)" class="');
+$html = "<div class=\"user-content {$userClass('attr')}\">Safe</div>";
+// Result: <div class="user-content &quot; onload=&quot;alert(1)&quot; class=&quot;">Safe</div>
+
+// JavaScript context attack
+$userData = new TemplateVariable('"; alert("XSS"); var x="');
+$js = "var message = '{$userData('js')}';";
+// Result: var message = '\"; alert(\"XSS\"); var x=\"';
+
+// Multi-context template
+$name = new TemplateVariable('<script>alert("XSS")</script>');
+$id = new TemplateVariable(42);
+$comment = new TemplateVariable('Check out </script><script>alert(1)</script>');
+
+$template = <<<HTML
+<div class="user" data-id="{$id}">
+    <h1>Welcome, {$name}!</h1>
+    <p>{$comment}</p>
 </div>
+<script>
+    var user = {
+        name: '{$name('js')}',
+        id: {$id},
+        comment: '{$comment('js')}'
+    };
+</script>
+HTML;
 ```
 
-### After (TemplateVariable)
+## 🔧 Advanced Configuration
+
+### Custom Escaper
 
 ```php
-<div class="<?= $userClass('attr'); ?>">
-    <h1><?= $title; ?></h1>
-    <p><?= $description; ?></p>
-    <script>
-        var userData = <?= $jsData('js'); ?>;
-    </script>
-    <a href="?search=<?= $searchTerm('url'); ?>">Search</a>
-</div>
+use Dzentota\TemplateVariable\Escaper\EscaperInterface;
+use Dzentota\TemplateVariable\Context\EscapeContext;
+
+class CustomEscaper implements EscaperInterface 
+{
+    public function escape(string $value, EscapeContext $context): string 
+    {
+        // Custom escaping logic
+        return "SAFE: " . htmlspecialchars($value);
+    }
+    
+    public function needsEscaping(string $value, EscapeContext $context): bool 
+    {
+        return str_contains($value, '<');
+    }
+}
+
+$var = new TemplateVariable('<test>', EscapeContext::HTML, new CustomEscaper());
+echo $var; // SAFE: &lt;test&gt;
 ```
+
+### Default Context Override
+
+```php
+// Set JavaScript as default context instead of HTML
+$var = new TemplateVariable('<script>', EscapeContext::JAVASCRIPT);
+echo $var; // \u003Cscript\u003E (JavaScript escaping)
+```
+
+## 🧪 Utility Methods
+
+```php
+$var = new TemplateVariable('<script>alert(1)</script>');
+
+// Check if escaping is needed
+$var->needsEscaping('html');     // true
+$var->needsEscaping('raw');      // false
+
+// Get raw value
+$var->getRaw();                  // <script>alert(1)</script>
+
+// Context shorthand
+$var('h');    // HTML context
+$var('a');    // Attribute context  
+$var('j');    // JavaScript context
+$var('c');    // CSS context
+$var('u');    // URL context
+$var('r');    // Raw context
+```
+
+## 🎯 Before/After Comparison
+
+### Traditional Approach
+```php
+<!-- Manual escaping - error prone -->
+<span><?= htmlspecialchars($userInput, ENT_QUOTES, 'UTF-8'); ?></span>
+<div class="<?= htmlspecialchars($className, ENT_QUOTES, 'UTF-8'); ?>">
+<script>var data = <?= json_encode($jsonData, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;</script>
+
+<!-- Easy to forget or make mistakes -->
+<span><?= $userInput; ?></span> <!-- ❌ VULNERABLE -->
+```
+
+### TemplateVariable Approach
+```php
+<!-- Automatic and context-aware -->
+<span><?= $userInput; ?></span>                    <!-- ✅ Auto-escaped -->
+<div class="<?= $className('attr'); ?>">           <!-- ✅ Attribute-safe -->
+<script>var data = '<?= $jsonData('js'); ?>';</script>    <!-- ✅ JS-safe -->
+
+<!-- Secure by default, explicit when needed -->
+```
+
+## 🏗️ Architecture
+
+### Core Components
+
+- **TemplateVariable** - Main class with magic methods
+- **ContextAwareEscaper** - Multi-context escaping implementation  
+- **EscapeContext** - Enum defining available contexts
+- **EscaperInterface** - Contract for custom escapers
+
+### Integration Points
+
+- **dzentota/typedvalue** - Automatic integration via `toNative()` method
+- **Stringable** - Support for objects implementing `__toString()`
+- **Custom Escapers** - Pluggable escaping strategies
+
+## 📋 Requirements
+
+- **PHP 8.1+** (uses enums and readonly properties)
+- **mbstring extension** (for JavaScript escaping)
+
+## 🧪 Testing
+
+```bash
+# Run tests
+./vendor/bin/phpunit
+
+# Run examples
+php examples/basic_usage.php
+```
+
+## 🔗 Related Projects
+
+- **[dzentota/typedvalue](https://github.com/dzentota/typedvalue)** - Domain primitive value objects
+- **[AppSec Manifesto](https://github.com/dzentota/appsec-manifesto)** - Security-first development principles
+
+## 📄 License
+
+MIT License. See [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 🛡️ Security
+
+This library is designed to prevent XSS attacks through automatic context-aware escaping. However, security is a shared responsibility:
+
+- **Always use explicit contexts** for non-HTML output
+- **Validate input** at application boundaries  
+- **Use TypedValue objects** for structured data
+- **Keep the library updated** to latest version
+- **Test your templates** with malicious input
+
+For security issues, please email [security@example.com](mailto:security@example.com).
+
+---
+
+**Making secure templating the default choice.** 🔒
 
 ## AppSec Manifesto Compliance
 

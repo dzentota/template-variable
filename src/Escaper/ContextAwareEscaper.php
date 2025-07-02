@@ -7,12 +7,12 @@ namespace Dzentota\TemplateVariable\Escaper;
 use Dzentota\TemplateVariable\Context\EscapeContext;
 
 /**
- * HTML context-aware escaper implementation
+ * Context-aware escaper implementation
  * 
  * This class implements secure escaping strategies for different output contexts
  * in accordance with the AppSec manifesto principles.
  */
-class HtmlEscaper implements EscaperInterface
+class ContextAwareEscaper implements EscaperInterface
 {
     /**
      * Escape a value for the specified context
@@ -75,6 +75,9 @@ class HtmlEscaper implements EscaperInterface
         $value = str_replace('\\', '\\\\', $value);
         $value = str_replace('"', '\\"', $value);
         $value = str_replace("'", "\\'", $value);
+        $value = str_replace('<', '\\3C ', $value);
+        $value = str_replace('>', '\\3E ', $value);
+        $value = str_replace('&', '\\26 ', $value);
         $value = str_replace("\n", '\\A ', $value);
         $value = str_replace("\r", '\\D ', $value);
         $value = str_replace("\t", '\\9 ', $value);
@@ -83,12 +86,71 @@ class HtmlEscaper implements EscaperInterface
     }
     
     /**
-     * Escape JavaScript content
+     * Escape JavaScript content (without adding quotes)
+     * 
+     * Based on Laminas Escaper approach for more flexible JavaScript escaping
      */
     private function escapeJavaScript(string $value): string
     {
-        // JSON encode provides safe JavaScript escaping
-        return json_encode($value, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
+        // Character-by-character escaping for JavaScript context
+        // This approach doesn't add quotes, making it more flexible
+        $escaped = '';
+        $length = mb_strlen($value, 'UTF-8');
+        
+        for ($i = 0; $i < $length; $i++) {
+            $char = mb_substr($value, $i, 1, 'UTF-8');
+            $ord = mb_ord($char, 'UTF-8');
+            
+            // Handle special JavaScript characters
+            switch ($char) {
+                case '"':
+                    $escaped .= '\\"';
+                    break;
+                case "'":
+                    $escaped .= "\\'";
+                    break;
+                case '\\':
+                    $escaped .= '\\\\';
+                    break;
+                case '/':
+                    $escaped .= '\\/';
+                    break;
+                case "\n":
+                    $escaped .= '\\n';
+                    break;
+                case "\r":
+                    $escaped .= '\\r';
+                    break;
+                case "\t":
+                    $escaped .= '\\t';
+                    break;
+                case "\f":
+                    $escaped .= '\\f';
+                    break;
+                case "\b":
+                    $escaped .= '\\b';
+                    break;
+                case '<':
+                    $escaped .= '\\u003C';
+                    break;
+                case '>':
+                    $escaped .= '\\u003E';
+                    break;
+                case '&':
+                    $escaped .= '\\u0026';
+                    break;
+                default:
+                    // Handle control characters and high Unicode
+                    if ($ord < 32 || $ord > 126) {
+                        $escaped .= sprintf('\\u%04X', $ord);
+                    } else {
+                        $escaped .= $char;
+                    }
+                    break;
+            }
+        }
+        
+        return $escaped;
     }
     
     /**
@@ -127,6 +189,9 @@ class HtmlEscaper implements EscaperInterface
         return str_contains($value, '\\') || 
                str_contains($value, '"') || 
                str_contains($value, "'") || 
+               str_contains($value, '<') ||
+               str_contains($value, '>') ||
+               str_contains($value, '&') ||
                str_contains($value, "\n") || 
                str_contains($value, "\r") || 
                str_contains($value, "\t");
@@ -142,7 +207,9 @@ class HtmlEscaper implements EscaperInterface
                str_contains($value, '&') || 
                str_contains($value, '"') || 
                str_contains($value, "'") || 
-               str_contains($value, '\\');
+               str_contains($value, '\\') || 
+               str_contains($value, '/') || 
+               preg_match('/[\x00-\x1F\x7F-\x9F]/', $value);
     }
     
     /**
@@ -150,6 +217,6 @@ class HtmlEscaper implements EscaperInterface
      */
     private function containsUrlSpecialChars(string $value): bool
     {
-        return preg_match('/[^A-Za-z0-9\-_.~]/', $value) === 1;
+        return $value !== rawurldecode(rawurlencode($value));
     }
 } 

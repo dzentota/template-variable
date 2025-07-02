@@ -6,8 +6,8 @@ namespace Dzentota\TemplateVariable;
 
 use Dzentota\TemplateVariable\Context\EscapeContext;
 use Dzentota\TemplateVariable\Escaper\EscaperInterface;
-use Dzentota\TemplateVariable\Escaper\HtmlEscaper;
-use Dzentota\TemplateVariable\Value\TypedValueInterface;
+use Dzentota\TemplateVariable\Escaper\ContextAwareEscaper;
+use Stringable;
 
 /**
  * TemplateVariable class for secure, context-aware template output
@@ -15,6 +15,11 @@ use Dzentota\TemplateVariable\Value\TypedValueInterface;
  * This class implements the security principles from the AppSec manifesto by providing
  * automatic context-aware escaping for template variables. It supports both implicit
  * escaping via __toString() and explicit context specification via __invoke().
+ * 
+ * Supported value types:
+ * - string|Stringable: Escaped according to context
+ * - TypedValue (dzentota\TypedValue\Typed): Value extracted with toNative() then processed
+ * - scalar values (bool, float, int, null): Returned as-is (not tainted)
  * 
  * Usage examples:
  * - $name->__toString() or (string)$name - auto-escapes for HTML context
@@ -28,17 +33,17 @@ class TemplateVariable
     private readonly EscapeContext $defaultContext;
     
     /**
-     * @param string|TypedValueInterface $value The value to be escaped
+     * @param mixed $value The value to be escaped (string, Stringable, TypedValue, or scalar)
      * @param EscapeContext $defaultContext The default escaping context (defaults to HTML)
-     * @param EscaperInterface|null $escaper Custom escaper (defaults to HtmlEscaper)
+     * @param EscaperInterface|null $escaper Custom escaper (defaults to ContextAwareEscaper)
      */
     public function __construct(
-        private readonly string|TypedValueInterface $value,
+        private readonly mixed $value,
         EscapeContext $defaultContext = EscapeContext::HTML,
         ?EscaperInterface $escaper = null
     ) {
         $this->defaultContext = $defaultContext;
-        $this->escaper = $escaper ?? new HtmlEscaper();
+        $this->escaper = $escaper ?? new ContextAwareEscaper();
     }
     
     /**
@@ -95,12 +100,30 @@ class TemplateVariable
     {
         $escapeContext = $context instanceof EscapeContext ? $context : $this->parseContext($context);
         
-        // If the value is already safe and we have a TypedValue, check its safety
-        if ($this->value instanceof TypedValueInterface && $this->value->isSafe()) {
+        // Scalar values (except strings) and non-Stringable objects don't need escaping as they're not tainted
+        $processedValue = $this->processValue();
+        if (!is_string($processedValue) && !($processedValue instanceof Stringable)) {
             return false;
         }
         
-        return $this->escaper->needsEscaping($this->getStringValue(), $escapeContext);
+        $stringValue = is_string($processedValue) ? $processedValue : (string) $processedValue;
+        return $this->escaper->needsEscaping($stringValue, $escapeContext);
+    }
+    
+    /**
+     * Process the value according to its type
+     * 
+     * @return mixed The processed value
+     */
+    private function processValue(): mixed
+    {
+        // Handle TypedValue objects (dzentota\TypedValue\Typed interface)
+        if (is_object($this->value) && method_exists($this->value, 'toNative')) {
+            return $this->value->toNative();
+        }
+        
+        // Return value as-is
+        return $this->value;
     }
     
     /**
@@ -110,11 +133,19 @@ class TemplateVariable
      */
     private function getStringValue(): string
     {
-        if ($this->value instanceof TypedValueInterface) {
-            return $this->value->getValue();
-        }
+        $processedValue = $this->processValue();
         
-        return $this->value;
+        // Convert to string representation
+        return match (true) {
+            is_string($processedValue) => $processedValue,
+            $processedValue instanceof Stringable => (string) $processedValue,
+            is_bool($processedValue) => $processedValue ? '1' : '',
+            is_null($processedValue) => '',
+            is_scalar($processedValue) => (string) $processedValue,
+            default => throw new \InvalidArgumentException(
+                'Value must be string, Stringable, TypedValue, or scalar. Got: ' . get_debug_type($processedValue)
+            )
+        };
     }
     
     /**
@@ -125,14 +156,15 @@ class TemplateVariable
      */
     private function escapeValue(EscapeContext $context): string
     {
-        $stringValue = $this->getStringValue();
+        $processedValue = $this->processValue();
         
-        // If the value is marked as safe (from TypedValue), return it as-is for most contexts
-        // Safe values are assumed to be already properly escaped for their intended use
-        if ($this->value instanceof TypedValueInterface && $this->value->isSafe()) {
-            return $stringValue;
+        // Scalar values (except strings) and non-Stringable objects are not tainted
+        if (!is_string($processedValue) && !($processedValue instanceof Stringable)) {
+            return $this->getStringValue();
         }
         
+        // String values and Stringable objects need escaping
+        $stringValue = is_string($processedValue) ? $processedValue : (string) $processedValue;
         return $this->escaper->escape($stringValue, $context);
     }
     
@@ -159,11 +191,11 @@ class TemplateVariable
     /**
      * Create a TemplateVariable with HTML context (most common case)
      * 
-     * @param string|TypedValueInterface $value
+     * @param mixed $value
      * @param EscaperInterface|null $escaper
      * @return static
      */
-    public static function html(string|TypedValueInterface $value, ?EscaperInterface $escaper = null): static
+    public static function html(mixed $value, ?EscaperInterface $escaper = null): static
     {
         return new static($value, EscapeContext::HTML, $escaper);
     }
@@ -171,11 +203,11 @@ class TemplateVariable
     /**
      * Create a TemplateVariable with attribute context
      * 
-     * @param string|TypedValueInterface $value
+     * @param mixed $value
      * @param EscaperInterface|null $escaper
      * @return static
      */
-    public static function attr(string|TypedValueInterface $value, ?EscaperInterface $escaper = null): static
+    public static function attr(mixed $value, ?EscaperInterface $escaper = null): static
     {
         return new static($value, EscapeContext::ATTRIBUTE, $escaper);
     }
@@ -183,11 +215,11 @@ class TemplateVariable
     /**
      * Create a TemplateVariable with JavaScript context
      * 
-     * @param string|TypedValueInterface $value
+     * @param mixed $value
      * @param EscaperInterface|null $escaper
      * @return static
      */
-    public static function js(string|TypedValueInterface $value, ?EscaperInterface $escaper = null): static
+    public static function js(mixed $value, ?EscaperInterface $escaper = null): static
     {
         return new static($value, EscapeContext::JAVASCRIPT, $escaper);
     }
@@ -195,11 +227,11 @@ class TemplateVariable
     /**
      * Create a TemplateVariable with CSS context
      * 
-     * @param string|TypedValueInterface $value
+     * @param mixed $value
      * @param EscaperInterface|null $escaper
      * @return static
      */
-    public static function css(string|TypedValueInterface $value, ?EscaperInterface $escaper = null): static
+    public static function css(mixed $value, ?EscaperInterface $escaper = null): static
     {
         return new static($value, EscapeContext::CSS, $escaper);
     }
@@ -207,23 +239,23 @@ class TemplateVariable
     /**
      * Create a TemplateVariable with URL context
      * 
-     * @param string|TypedValueInterface $value
+     * @param mixed $value
      * @param EscaperInterface|null $escaper
      * @return static
      */
-    public static function url(string|TypedValueInterface $value, ?EscaperInterface $escaper = null): static
+    public static function url(mixed $value, ?EscaperInterface $escaper = null): static
     {
         return new static($value, EscapeContext::URL, $escaper);
     }
     
     /**
-     * Create a TemplateVariable with raw (no escaping) context
+     * Create a TemplateVariable with raw context (no escaping)
      * 
-     * @param string|TypedValueInterface $value
+     * @param mixed $value
      * @param EscaperInterface|null $escaper
      * @return static
      */
-    public static function raw(string|TypedValueInterface $value, ?EscaperInterface $escaper = null): static
+    public static function raw(mixed $value, ?EscaperInterface $escaper = null): static
     {
         return new static($value, EscapeContext::RAW, $escaper);
     }

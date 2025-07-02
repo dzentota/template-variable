@@ -4,5 +4,6 @@ vendor
 .cache
 .bash_history
 .phpunit.result.cache
+.phpunit.cache/*
 tmp/*
 build/*
