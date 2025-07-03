@@ -18,12 +18,13 @@ use Stringable;
  * escaping via __toString() and explicit context specification via __invoke().
  * 
  * Smart value handling via create() method:
+ * - Arrays and Traversable objects: wrapped in TemplateVariableCollection for secure iteration
  * - Scalars, Stringable, and TypedValue objects: wrapped in TemplateVariable for escaping
- * - Arrays and other objects: returned as-is to preserve natural behavior
+ * - Other objects: returned as-is to preserve natural behavior
  * 
  * Usage examples:
  * - $name = TemplateVariable::create('<script>'); echo $name; // auto-escaped
- * - $data = TemplateVariable::create(['key' => 'value']); // returns array as-is
+ * - $users = TemplateVariable::create($userArray); foreach ($users as $user) { echo $user; } // secure iteration
  * - $name('html') - explicitly escape for HTML context
  * - $class('attr') - explicitly escape for HTML attribute context
  * - $script('js') - explicitly escape for JavaScript context
@@ -194,25 +195,35 @@ class TemplateVariable
     }
     
     /**
-     * Create a TemplateVariable or return the value as-is for non-escapable types
+     * Create a TemplateVariable, TemplateVariableCollection, or return the value as-is
      * 
-     * For scalars, Stringable objects, and TypedValue objects, creates a TemplateVariable for escaping.
-     * For arrays and other objects, returns the value as-is to preserve behavior.
+     * Smart value handling:
+     * - Arrays and Traversable objects: wrapped in TemplateVariableCollection for secure iteration
+     * - Scalars, Stringable, and TypedValue objects: wrapped in TemplateVariable for escaping
+     * - Other objects: returned as-is to preserve behavior
      * 
      * @param mixed $value
      * @param EscapeContext $defaultContext
      * @param EscaperInterface|null $escaper
-     * @return mixed TemplateVariable instance or the original value
+     * @return mixed TemplateVariable, TemplateVariableCollection, or the original value
      */
     public static function create(
         mixed $value,
         EscapeContext $defaultContext = EscapeContext::HTML,
         ?EscaperInterface $escaper = null
     ): mixed {
-        if (!is_scalar($value) && !($value instanceof Typed) && !($value instanceof Stringable)) {
-            return $value;
+        // Handle collections (arrays and Traversable objects) with TemplateVariableCollection
+        if (is_array($value) || $value instanceof \Traversable) {
+            return new \Dzentota\TemplateVariable\TemplateVariableCollection($value, $defaultContext, $escaper);
         }
-        return new static($value, $defaultContext, $escaper);
+        
+        // Handle escapable types with TemplateVariable
+        if (is_scalar($value) || ($value instanceof Typed) || ($value instanceof Stringable)) {
+            return new static($value, $defaultContext, $escaper);
+        }
+        
+        // Return other objects as-is
+        return $value;
     }
     
     /**

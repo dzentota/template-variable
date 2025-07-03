@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-07-03
+
+### Added
+- **TemplateVariableCollection** - Major new feature for collection security
+- Automatic wrapping of arrays and Traversable objects for secure iteration
+- Collection items are automatically wrapped as TemplateVariable instances
+- Support for nested collections with recursive security
+- ArrayAccess and IteratorAggregate support for intuitive collection usage
+- Countable interface for collections
+- Context propagation to all collection items
+- Read-only collection design for security by design
+- Comprehensive test suite (17 new tests) for collection functionality
+- New collection security demonstration example (`collection_security.php`)
+
+### Changed
+- Enhanced `TemplateVariable::create()` to detect and wrap collections
+- Updated documentation with collection security examples
+- Enhanced README with dedicated Collection Security section
+
+### Security
+- **MAJOR**: Closes security gap in template rendering with collections
+- Prevents XSS in foreach loops and array access scenarios
+- Extends "secure by default" behavior to complex data structures
+- Addresses AppSec Manifesto compliance for collection handling
+
 ## [1.0.0] - 2025-01-30
 
 ### Added

@@ -9,6 +9,7 @@ A secure template variable library that provides context-aware escaping for PHP 
 
 - **🔒 Automatic Context-Aware Escaping** - Default HTML escaping via `__toString()` magic method
 - **🎯 Explicit Context Control** - Specify exact context via `__invoke()` method  
+- **📚 Collection-Aware Security** - Arrays and Traversable objects wrapped for secure iteration
 - **🏷️ TypedValue Integration** - Works with [dzentota/typedvalue](https://github.com/dzentota/typedvalue) objects
 - **⚡ Scalar Value Safety** - Treats scalar values (int, float, bool, null) as safe (not tainted)
 - **🌐 Multiple Context Support** - HTML, attributes, JavaScript, CSS, URL, and raw contexts
@@ -68,9 +69,44 @@ Into this secure pattern:
 TemplateVariable intelligently handles different value types:
 
 - **Strings & Stringable** - Escaped according to context
+- **Arrays & Traversable** - Wrapped in `TemplateVariableCollection` for secure iteration
 - **TypedValue objects** - Value extracted with `toNative()`, then processed
 - **Scalar values** (bool, float, int, null) - Returned as-is (not tainted)
 - **Custom objects** - Must implement `Stringable` or have `toNative()` method
+
+## 📚 Collection Security (New!)
+
+TemplateVariable now provides **secure-by-default** handling for collections, addressing a critical gap in template security:
+
+### The Problem
+Traditional template security fails with collections:
+```php
+// ❌ VULNERABLE - Each user object bypasses escaping
+$users = $arrayOfUserObjects;
+foreach ($users as $user) {
+    echo "<span>{$user->name}</span>"; // XSS vulnerability!
+}
+```
+
+### The Solution
+TemplateVariable collections automatically wrap each item:
+```php
+// ✅ SECURE - Each item automatically wrapped
+$users = TemplateVariable::create($arrayOfUserObjects);
+foreach ($users as $user) {
+    echo "<span>{$user}</span>"; // Automatically escaped!
+}
+
+// Array-style access also secure
+echo $users[0]; // First user, automatically escaped
+```
+
+### Collection Features
+- **Automatic Item Wrapping** - Each accessed item becomes a `TemplateVariable`
+- **Nested Collection Support** - Arrays of arrays handled recursively
+- **Traversable Support** - Works with any `Traversable` object
+- **Context Propagation** - Default escape context passed to all items
+- **Read-Only Access** - Collections cannot be modified (security by design)
 
 ## 📚 Quick Start
 
@@ -125,6 +161,44 @@ $regularObject = new class {
 };
 $result = TemplateVariable::create($regularObject);
 // $result is the original object, NOT a TemplateVariable
+```
+
+### Collection Security in Action
+
+```php
+// Simulate ActiveRecord-style objects with potential XSS
+$users = [
+    (object)['name' => '<script>alert("Admin")</script>', 'role' => 'admin'],
+    (object)['name' => '" onload="alert(1)" class="', 'role' => 'user'],
+    (object)['name' => 'Safe User', 'role' => 'user']
+];
+
+// Secure collection wrapping
+$safeUsers = TemplateVariable::create($users);
+
+foreach ($safeUsers as $user) {
+    // Each $user is automatically wrapped as TemplateVariable
+    echo "<div class=\"user\">{$user}</div>"; // Safe output!
+}
+
+// Nested arrays also secured
+$userGroups = [
+    'admins' => [
+        (object)['name' => '<script>alert("XSS")</script>'],
+        (object)['name' => 'Safe Admin']
+    ],
+    'users' => [
+        (object)['name' => '" onclick="alert(1)"'],
+    ]
+];
+
+$safeGroups = TemplateVariable::create($userGroups);
+foreach ($safeGroups as $groupName => $group) {
+    echo "<h3>{$groupName}</h3>";
+    foreach ($group as $user) {
+        echo "<p>{$user}</p>"; // Nested security!
+    }
+}
 ```
 
 ### Scalar Value Safety
@@ -311,7 +385,8 @@ $var('r');    // Raw context
 
 ### Core Components
 
-- **TemplateVariable** - Main class with magic methods
+- **TemplateVariable** - Main class with magic methods for individual values
+- **TemplateVariableCollection** - Collection wrapper that secures arrays and Traversable objects
 - **ContextAwareEscaper** - Multi-context escaping implementation  
 - **EscapeContext** - Enum defining available contexts
 - **EscaperInterface** - Contract for custom escapers

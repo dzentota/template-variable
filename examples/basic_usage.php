@@ -105,6 +105,33 @@ $regularObj = TemplateVariable::create($regularObject);
 echo "Real TypedValue: " . $realTv . " (extracted via toNative() and escaped)\n";
 echo "Regular object: " . get_class($regularObj) . " (returned as-is, toNative() ignored)\n\n";
 
+// Example 6.5: Collection handling demonstration
+echo "6.5. Collection Handling - Secure by Default:\n";
+
+// Create a collection of potentially dangerous data
+$dangerousData = [
+    '<script>alert("XSS in item 1")</script>',
+    '" onload="alert(\'XSS in item 2\')" class="',
+    'Safe item 3',
+    42,
+    true
+];
+
+$secureCollection = TemplateVariable::create($dangerousData);
+echo "Collection type: " . get_class($secureCollection) . "\n";
+echo "Collection count: " . count($secureCollection) . "\n";
+
+echo "Secure iteration:\n";
+foreach ($secureCollection as $index => $item) {
+    $itemType = is_object($item) ? get_class($item) : gettype($item);
+    $output = $item === null ? 'null' : (string) $item;
+    echo "  [{$index}] {$itemType}: {$output}\n";
+}
+
+echo "Array-style access:\n";
+echo "  First item: " . $secureCollection[0] . "\n";
+echo "  Second item: " . $secureCollection[1] . "\n\n";
+
 // Example 7: Stringable objects
 echo "7. Stringable Objects:\n";
 $stringable = new class implements Stringable {

@@ -159,10 +159,11 @@ class TemplateVariableTest extends TestCase
         $intVar = TemplateVariable::create($intInput);
         $this->assertEquals($intInput, $intVar->getRaw());
         
-        // Arrays are returned as-is by create()
+        // Arrays now return TemplateVariableCollection
         $arrayInput = ['key' => 'value'];
         $arrayResult = TemplateVariable::create($arrayInput);
-        $this->assertEquals($arrayInput, $arrayResult); // Returns the array itself, not a TemplateVariable
+        $this->assertInstanceOf(\Dzentota\TemplateVariable\TemplateVariableCollection::class, $arrayResult);
+        $this->assertEquals($arrayInput, $arrayResult->getRaw()); // getRaw() returns the original array
     }
     
     /**
@@ -185,11 +186,11 @@ class TemplateVariableTest extends TestCase
         $this->assertInstanceOf(TemplateVariable::class, $boolVar);
         $this->assertEquals('1', (string) $boolVar);
         
-        // Test with array - should return array as-is
+        // Test with array - should return TemplateVariableCollection
         $arrayInput = ['test' => 'value'];
         $arrayResult = TemplateVariable::create($arrayInput);
-        $this->assertEquals($arrayInput, $arrayResult);
-        $this->assertNotInstanceOf(TemplateVariable::class, $arrayResult);
+        $this->assertInstanceOf(\Dzentota\TemplateVariable\TemplateVariableCollection::class, $arrayResult);
+        $this->assertEquals($arrayInput, $arrayResult->getRaw());
         
         // Test with object - should return object as-is
         $objectInput = new \stdClass();
