@@ -1,7 +1,7 @@
 # TemplateVariable - Secure Context-Aware Template Variables for PHP
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PHP Version](https://img.shields.io/badge/PHP-8.1%2B-blue.svg)](https://php.net)
+[![PHP Version](https://img.shields.io/badge/PHP-8.3%2B-blue.svg)](https://php.net)
 
 A secure template variable library that provides context-aware escaping for PHP templates, supporting the [AppSec Manifesto](https://github.com/dzentota/AppSecManifesto) principles by automatically preventing XSS vulnerabilities through intelligent output escaping.
 
@@ -244,10 +244,41 @@ $style = TemplateVariable::create('color: red; </style><script>alert(1)</script>
 echo "body { content: '{$style('css')}'; }";
 ```
 
-### URL Context
+### URL Component Context (`url`)
+Percent-encodes the **whole value** with `rawurlencode()`. Use it for a single query value
+or path segment only — never for a whole URL in `href`/`src` (it would encode `://`, and
+it does not block `javascript:`).
 ```php
 $param = TemplateVariable::create('hello world & more');
 echo "https://example.com?q={$param('url')}";
+```
+
+### URL Attribute Context (`href` / `src` / `url_attr`)
+For a **whole URL** placed in an HTML attribute. The value is trimmed; values with control
+characters, Unicode whitespace or invisible characters are rejected; the scheme is
+allowlisted (`http`, `https`, `mailto`, plus relative paths, `?query` and `#fragment`);
+entity- and percent-encoded schemes are checked too; protocol-relative `//host` is rejected
+by default. Rejected values become `#`. The result is then HTML-attribute escaped.
+```php
+$link = TemplateVariable::create('javascript:alert(1)');
+echo '<a href="' . $link('href') . '">';           // <a href="#">
+echo '<img src="' . TemplateVariable::create('/a.png?x=1&y=2')('src') . '">'; // /a.png?x=1&amp;y=2
+
+// Configure schemes, protocol-relative URLs and the placeholder
+$escaper = new ContextAwareEscaper(
+    allowedUrlSchemes: ['https', 'tel'],
+    allowProtocolRelative: true,
+    unsafeUrlPlaceholder: 'about:blank',
+);
+```
+
+### Truthiness
+`bool` and `null` are **not** wrapped by `create()` (nor by collections), so `if ($flag)` works.
+Other wrapped values are objects and are always truthy — use `isTruthy()`:
+```php
+<?php if ($user['is_admin']): ?>            <!-- bool: works -->
+<?php if ($count->isTruthy()): ?>          <!-- int/string: use isTruthy() -->
+<?php if ($items->isTruthy()): ?>          <!-- collection: non-empty -->
 ```
 
 ### Raw Context (No Escaping)
@@ -264,7 +295,8 @@ $html = TemplateVariable::html('<script>');
 $attr = TemplateVariable::attr('" onclick="');
 $js = TemplateVariable::js('</script>');
 $css = TemplateVariable::css('</style>');
-$url = TemplateVariable::url('hello world');
+$url = TemplateVariable::url('hello world');        // URL component
+$href = TemplateVariable::urlAttr('https://x.test'); // whole URL in href/src
 $raw = TemplateVariable::raw('<b>trusted</b>');
 ```
 
@@ -354,7 +386,8 @@ $var('h');    // HTML context
 $var('a');    // Attribute context  
 $var('j');    // JavaScript context
 $var('c');    // CSS context
-$var('u');    // URL context
+$var('u');    // URL component context
+$var('href'); // URL attribute context (also 'src', 'url_attr')
 $var('r');    // Raw context
 ```
 
@@ -399,7 +432,7 @@ $var('r');    // Raw context
 
 ## 📋 Requirements
 
-- **PHP 8.1+** (uses enums and readonly properties)
+- **PHP 8.3+** (uses enums and readonly properties)
 - **mbstring extension** (for JavaScript escaping)
 
 ## 🧪 Testing
@@ -505,7 +538,7 @@ if ($var->needsEscaping('html')) {
 
 ## Requirements
 
-- PHP 8.1 or higher
+- PHP 8.3 or higher
 - No additional dependencies for core functionality
 
 ## Contributing

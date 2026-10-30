@@ -10,7 +10,7 @@
         }
     ],
     "require": {
-        "php": ">=8.1",
+        "php": ">=8.3",
         "dzentota/typedvalue": "dev-master"
     },
     "require-dev": {

@@ -223,8 +223,8 @@ class TemplateVariableCollectionTest extends TestCase
         
         $results = [];
         foreach ($collection as $key => $item) {
-            if ($item === null) {
-                // null values are returned as-is by create()
+            if ($item === null || is_bool($item)) {
+                // bool and null values are returned as-is by create()
                 $results[$key] = $item;
             } else {
                 $this->assertInstanceOf(TemplateVariable::class, $item);
@@ -234,7 +234,7 @@ class TemplateVariableCollectionTest extends TestCase
         
         $this->assertEquals([
             0 => '42',
-            1 => '1',
+            1 => true,
             2 => '3.14',
             3 => null,
             4 => 'string'

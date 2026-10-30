@@ -61,7 +61,7 @@ class TemplateVariableCollection implements IteratorAggregate, ArrayAccess, Coun
     public function offsetGet(mixed $offset): mixed
     {
         if (is_array($this->collection)) {
-            if (!isset($this->collection[$offset])) {
+            if (!array_key_exists($offset, $this->collection)) {
                 throw new \OutOfBoundsException("Offset {$offset} does not exist");
             }
             return TemplateVariable::create($this->collection[$offset], $this->defaultContext, $this->escaper);
@@ -107,6 +107,14 @@ class TemplateVariableCollection implements IteratorAggregate, ArrayAccess, Coun
         }
         
         return $count;
+    }
+
+    /**
+     * True when the collection is non-empty (objects are always truthy in `if (...)`).
+     */
+    public function isTruthy(): bool
+    {
+        return $this->count() > 0;
     }
 
     /**
