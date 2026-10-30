@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "99ae3fc31c5cbc4674978701815b0049",
+    "content-hash": "3df17f8dcada7bc686bfbfe35d0e7da0",
     "packages": [
         {
             "name": "dzentota/typedvalue",
@@ -4216,8 +4216,8 @@
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.1"
+        "php": ">=8.3"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }
