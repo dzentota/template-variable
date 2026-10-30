@@ -16,6 +16,9 @@ enum EscapeContext: string
     case ATTRIBUTE = 'attr';
     case CSS = 'css';
     case JAVASCRIPT = 'js';
+    /** URL component (query value / path segment): rawurlencode(). NOT for whole href/src values. */
     case URL = 'url';
+    /** Whole URL inside an HTML attribute (href, src, action...): scheme allowlist + attribute escaping. */
+    case URL_ATTR = 'url_attr';
     case RAW = 'raw';
 } 

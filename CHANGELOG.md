@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - Unreleased
+
+### Added
+- `EscapeContext::URL_ATTR` (`'url_attr'`; aliases `'href'`, `'src'`, `'urlattr'`) for whole URLs in
+  HTML attributes: trims, rejects control/whitespace/invisible characters, allowlists schemes
+  (http, https, mailto, relative refs), checks entity- and percent-decoded forms, rejects
+  protocol-relative `//host` by default, replaces unsafe values with `#`, then attribute-escapes.
+- `ContextAwareEscaper` constructor options: `allowedUrlSchemes`, `allowProtocolRelative`, `unsafeUrlPlaceholder`;
+  public `sanitizeUrl()`.
+- `TemplateVariable::urlAttr()` factory.
+- `TemplateVariable::isTruthy()` and `TemplateVariableCollection::isTruthy()`.
+- `'url_component'` alias for the existing `url` context.
+
+### Changed
+- **BC break:** `TemplateVariable::create()` (and collection iteration/array access) now returns `bool`
+  values as-is instead of wrapping them, so `if ($flag)` in templates is no longer always true.
+  Echo output is unchanged (`true` → `1`, `false` → ``); calling `$flag('html')` on a bool no longer works.
+  Use `TemplateVariable::html($bool)` if a wrapped bool is really required.
+- The `url` context is documented as "URL component" encoding; its behaviour is unchanged.
+- Requires PHP >= 8.3.
+
+### Fixed
+- `TemplateVariableCollection::offsetGet()` no longer throws for keys whose value is `null`.
+
 ## [1.1.0] - 2025-07-03
 
 ### Added

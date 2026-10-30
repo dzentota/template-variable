@@ -182,9 +182,9 @@ class TemplateVariableTest extends TestCase
         $this->assertEquals('42', (string) $intVar);
         $this->assertFalse($intVar->needsEscaping('html'));
         
+        // bool is returned as-is (since 1.2.0) so it keeps its truthiness in templates
         $boolVar = TemplateVariable::create(true);
-        $this->assertInstanceOf(TemplateVariable::class, $boolVar);
-        $this->assertEquals('1', (string) $boolVar);
+        $this->assertTrue($boolVar);
         
         // Test with array - should return TemplateVariableCollection
         $arrayInput = ['test' => 'value'];
@@ -304,7 +304,7 @@ class TemplateVariableTest extends TestCase
         // Scalar values should not need escaping
         $this->assertFalse($intVar->needsEscaping('html'));
         $this->assertFalse($floatVar->needsEscaping('html'));
-        $this->assertFalse($boolVar->needsEscaping('html'));
+        $this->assertFalse(TemplateVariable::html(true)->needsEscaping('html'));
     }
     
     /**

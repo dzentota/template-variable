@@ -70,7 +70,8 @@ class TemplateVariable
      * - $name('html') for HTML content
      * - $class('attr') for HTML attributes
      * - $script('js') for JavaScript context
-     * - $url('url') for URL context
+     * - $param('url') for a URL component (query value, path segment)
+     * - $link('href') / $link('url_attr') for a whole URL in href/src (scheme allowlisted)
      * - $style('css') for CSS context
      * - $raw('raw') for raw, unescaped output
      * 
@@ -94,6 +95,17 @@ class TemplateVariable
         return $this->value;
     }
     
+    /**
+     * PHP truthiness of the underlying (native) value.
+     *
+     * Wrapped values are objects and therefore always truthy in `if ($var)`;
+     * use `if ($var->isTruthy())` in templates instead.
+     */
+    public function isTruthy(): bool
+    {
+        return (bool) $this->processValue();
+    }
+
     /**
      * Check if the value needs escaping for a specific context
      * 
@@ -188,7 +200,8 @@ class TemplateVariable
             'attr', 'attribute', 'a' => EscapeContext::ATTRIBUTE,
             'css', 'style', 'c' => EscapeContext::CSS,
             'js', 'javascript', 'script', 'j' => EscapeContext::JAVASCRIPT,
-            'url', 'uri', 'u' => EscapeContext::URL,
+            'url', 'uri', 'u', 'url_component' => EscapeContext::URL,
+            'url_attr', 'urlattr', 'href', 'src' => EscapeContext::URL_ATTR,
             'raw', 'none', 'r' => EscapeContext::RAW,
             default => throw new \InvalidArgumentException("Unknown escape context: {$context}")
         };
@@ -217,6 +230,11 @@ class TemplateVariable
             return new \Dzentota\TemplateVariable\TemplateVariableCollection($value, $defaultContext, $escaper);
         }
         
+        // bool and null carry no taint and must keep their truthiness in `if (...)`
+        if (is_bool($value) || $value === null) {
+            return $value;
+        }
+
         // Handle escapable types with TemplateVariable
         if (is_scalar($value) || ($value instanceof Typed) || ($value instanceof Stringable)) {
             return new static($value, $defaultContext, $escaper);
@@ -275,7 +293,15 @@ class TemplateVariable
     }
     
     /**
-     * Create a TemplateVariable with URL context
+     * Create a TemplateVariable whose default context is a whole URL in an attribute (href/src)
+     */
+    public static function urlAttr(mixed $value, ?EscaperInterface $escaper = null): static
+    {
+        return new static($value, EscapeContext::URL_ATTR, $escaper);
+    }
+
+    /**
+     * Create a TemplateVariable with URL component context
      * 
      * @param mixed $value
      * @param EscaperInterface|null $escaper
